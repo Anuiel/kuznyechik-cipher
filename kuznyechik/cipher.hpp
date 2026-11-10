@@ -39,15 +39,17 @@ inline Block from_number(uint8_t i) {
     return b;
 }
 
-class EncryptBlock {
+class CipherBlock {
 public:
-    virtual ~EncryptBlock() = default;
+    virtual ~CipherBlock() = default;
     virtual void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) = 0;
+    virtual void decrypt(Block& block, const std::optional<Block>& key = std::nullopt) = 0;
 };
 
-class EncryptBlockPermute : public EncryptBlock {
+class CipherBlockPermute : public CipherBlock {
 public:
     void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
+    void decrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
 
 private:
     static constexpr std::array<uint8_t, 256> _permutation{
@@ -68,21 +70,32 @@ private:
          32, 113, 103, 164,  45,  43,   9,  91, 203, 155,  37, 208, 190, 229, 108,  82,
          89, 166, 116, 210, 230, 244, 180, 192, 209, 102, 175, 194,  57,  75,  99, 182
     };
+
+    static constexpr std::array<uint8_t, 256> _permutation_inverse = [] {
+        std::array<uint8_t, 256> inverse{};
+        for (size_t i = 0; i < _permutation.size(); ++i) {
+            inverse[_permutation[i]] = static_cast<uint8_t>(i);
+        }
+        return inverse;
+    }();
 };
 
 
-class EncryptBlockAdd : public EncryptBlock {
+class CipherBlockAdd : public CipherBlock {
 public:
     void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
+    void decrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
 };
 
 
-class EncryptBlockLinear : public EncryptBlock {
+class CipherBlockLinear : public CipherBlock {
 public:
     std::optional<uint8_t> powerOf(uint8_t value) const;
 
     void encryptSingle(Block& block);
+    void decryptSingle(Block& block);
     void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
+    void decrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
 
 private:
     static constexpr size_t _LINEAR_ROUNDS = 16;
@@ -127,20 +140,21 @@ public:
     void encrypt(Block& block_a, Block& block_b, const Block& key);
 
 private:
-    EncryptBlockLinear _linear{};
-    EncryptBlockPermute _permute{};
-    EncryptBlockAdd _add{};
+    CipherBlockLinear _linear{};
+    CipherBlockPermute _permute{};
+    CipherBlockAdd _add{};
 };
 
 std::vector<Block> get_round_keys(const Block& key_left, const Block& key_right);
 
-class EncryptFull {
+class CipherFull {
 public:
-    EncryptFull(const KeyBlock& key);
+    CipherFull(const KeyBlock& key);
     void encrypt(Block& block);
+    void decrypt(Block& block);
 private:
     std::vector<Block> _round_keys;
-    EncryptBlockLinear _linear{};
-    EncryptBlockPermute _permute{};
-    EncryptBlockAdd _add{};
+    CipherBlockLinear _linear{};
+    CipherBlockPermute _permute{};
+    CipherBlockAdd _add{};
 };

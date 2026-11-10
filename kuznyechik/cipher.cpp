@@ -4,27 +4,38 @@
 #include <cstdint>
 #include <algorithm>
 
-void EncryptBlockPermute::encrypt(Block& block, const std::optional<Block>&) {
+void CipherBlockPermute::encrypt(Block& block, const std::optional<Block>&) {
     for (size_t i = 0; i < BLOCK_SIZE; ++i) {
         block[i] = _permutation[block[i]];
     }
 }
 
-void EncryptBlockAdd::encrypt(Block& block, const std::optional<Block>& key) {
+void CipherBlockPermute::decrypt(Block& block, const std::optional<Block>&) {
+    for (size_t i = 0; i < BLOCK_SIZE; ++i) {
+        block[i] = _permutation_inverse[block[i]];
+    }
+}
+
+void CipherBlockAdd::encrypt(Block& block, const std::optional<Block>& key) {
     const Block& key_block = key.value();
     for (size_t i = 0; i < BLOCK_SIZE; ++i) {
         block[i] ^= key_block[i];
     }
 }
 
-std::optional<std::uint8_t> EncryptBlockLinear::powerOf(uint8_t value) const {
+void CipherBlockAdd::decrypt(Block& block, const std::optional<Block>& key) {
+    // Xor is involution x = f(f(x))
+    CipherBlockAdd::encrypt(block, key);
+}
+
+std::optional<std::uint8_t> CipherBlockLinear::powerOf(uint8_t value) const {
     if (value == 0) {
         return std::nullopt;
     }
     return _reverse_powers[value];
 }
 
-void EncryptBlockLinear::encryptSingle(Block& block) {
+void CipherBlockLinear::encryptSingle(Block& block) {
     uint8_t result = 0;
     for (size_t i = 0; i < BLOCK_SIZE; ++i) {
         auto opt_block_power = powerOf(block[i]);
@@ -40,10 +51,33 @@ void EncryptBlockLinear::encryptSingle(Block& block) {
     block[0] = result;
 }
 
+void CipherBlockLinear::decryptSingle(Block& block) {
+    uint8_t result = 0;
+    for (size_t i = 1; i < BLOCK_SIZE; ++i) {
+        auto opt_block_power = powerOf(block[i]);
+        if (opt_block_power.has_value()) {
+            uint8_t addend = _powers[(powerOf(_coefs[i - 1]).value() + opt_block_power.value()) % 255];
+            result ^= addend;
+        } // else add 0 to result
+    }
+    result ^= block[0];
+    static_assert(_coefs[BLOCK_SIZE - 1] == 1);
 
-void EncryptBlockLinear::encrypt(Block& block, const std::optional<Block>&) {
+    for (size_t i = 0; i < BLOCK_SIZE - 1; ++i) {
+        block[i] = block[i + 1];
+    }
+    block[BLOCK_SIZE - 1] = result;
+}
+
+void CipherBlockLinear::encrypt(Block& block, const std::optional<Block>&) {
     for (size_t _ = 0; _ < _LINEAR_ROUNDS; _++) {
         encryptSingle(block);
+    }
+}
+
+void CipherBlockLinear::decrypt(Block& block, const std::optional<Block>&) {
+    for (size_t _ = 0; _ < _LINEAR_ROUNDS; _++) {
+        decryptSingle(block);
     }
 }
 
@@ -57,10 +91,9 @@ void KeyScheduleStep::encrypt(Block& block_a, Block& block_b, const Block& key) 
     block_a = tmp;
 }
 
-
 std::vector<Block> get_round_keys(const Block& key_left, const Block& key_right) {
     KeyScheduleStep block{};
-    EncryptBlockLinear linear{};
+    CipherBlockLinear linear{};
 
     std::vector<Block> c(32);
     for (size_t i = 0; i < 32; ++i) {
@@ -82,17 +115,26 @@ std::vector<Block> get_round_keys(const Block& key_left, const Block& key_right)
     return keys;
 }
 
-EncryptFull::EncryptFull(const KeyBlock& key) {
+CipherFull::CipherFull(const KeyBlock& key) {
     auto [key_left, key_right] = split_key_block(key);
     _round_keys = get_round_keys(key_left, key_right);
 }
 
 
-void EncryptFull::encrypt(Block& block) {
+void CipherFull::encrypt(Block& block) {
     for (size_t i = 0; i + 1 < _round_keys.size(); ++i) {
         _add.encrypt(block, _round_keys[i]);
         _permute.encrypt(block);
         _linear.encrypt(block);
     }
     _add.encrypt(block, _round_keys.back());
+}
+
+void CipherFull::decrypt(Block &block) {
+    _add.decrypt(block, _round_keys.back());
+    for (size_t i = _round_keys.size() - 1; i > 0; --i) {
+        _linear.decrypt(block);
+        _permute.decrypt(block);
+        _add.decrypt(block, _round_keys[i - 1]);
+    }
 }

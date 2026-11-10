@@ -33,15 +33,22 @@ void writeHexByte(std::ostream& out, uint8_t byte) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 7) {
-        std::cerr << "Usage: main --input INPUT --output OUTPUT --key KEY\n";
+    const char* usage = "Usage: main (--encrypt | --decrypt) --input INPUT --output OUTPUT --key KEY\n";
+    if (argc != 8) {
+        std::cerr << usage;
+        return 1;
+    }
+
+    std::string mode = argv[1];
+    if (mode != "--encrypt" && mode != "--decrypt") {
+        std::cerr << usage;
         return 1;
     }
 
     std::string input_path;
     std::string output_path;
     std::string key_path;
-    for (int i = 1; i < argc; i += 2) {
+    for (int i = 2; i < argc; i += 2) {
         std::string option = argv[i];
         if (option == "--input") {
             input_path = argv[i + 1];
@@ -53,6 +60,10 @@ int main(int argc, char* argv[]) {
             std::cerr << "Unknown option: " << option << '\n';
             return 1;
         }
+    }
+    if (input_path.empty() || output_path.empty() || key_path.empty()) {
+        std::cerr << usage;
+        return 1;
     }
 
     std::ifstream input(input_path);
@@ -71,7 +82,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    EncryptFull cipher{key};
+    CipherFull cipher{key};
     Block block{};
     while (true) {
         std::size_t count = 0;
@@ -80,7 +91,11 @@ int main(int argc, char* argv[]) {
         }
         if (count == 0) break;
 
-        cipher.encrypt(block);
+        if (mode == "--decrypt") {
+            cipher.decrypt(block);
+        } else {
+            cipher.encrypt(block);
+        }
         for (auto byte : block) {
             writeHexByte(output, byte);
         }

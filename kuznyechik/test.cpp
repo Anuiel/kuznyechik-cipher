@@ -117,8 +117,8 @@ void testBlockFromNumber() {
 
 // Most of the test results are from https://datatracker.ietf.org/doc/html/rfc7801
 
-void testEncryptBlockPermute() {
-    EncryptBlockPermute permute_block{};
+void testEncryptPermute() {
+    CipherBlockPermute permute_block{};
     Block input = blockFromHex("ffeeddccbbaa99881122334455667700");
     std::vector<Block> outputs = {
                 blockFromHex("b66cd8887d38e8d77765aeea0c9a7efc"),
@@ -132,8 +132,23 @@ void testEncryptBlockPermute() {
     }
 }
 
-void testEncryptBlockAdd() {
-    EncryptBlockAdd add_block{};
+void testDecryptPermute() {
+    CipherBlockPermute permute_block{};
+    Block input = blockFromHex("23ae65633f842d29c5df529c13f5acda");
+    std::vector<Block> outputs = {
+                blockFromHex("0c3322fed531e4630d80ef5c5a81c50b"),
+                blockFromHex("559d8dd7bd06cbfe7e7b262523280d39"),
+                blockFromHex("b66cd8887d38e8d77765aeea0c9a7efc"),
+                blockFromHex("ffeeddccbbaa99881122334455667700")
+    };
+    for (auto output : outputs) {
+        permute_block.decrypt(input);
+        expectBlockEqual(input, output, __func__);
+    }
+}
+
+void testEncryptAdd() {
+    CipherBlockAdd add_block{};
     Block input =  blockFromHex("00112233445566778899aabbccddeeff");
     Block key =    blockFromHex("0102030405060708090a0b0c0d0e0f00");
     Block output = blockFromHex("011321374153617f8193a1b7c1d3e1ff");
@@ -141,9 +156,17 @@ void testEncryptBlockAdd() {
     expectBlockEqual(input, output, __func__);
 } 
 
+void testDecryptAdd() {
+    CipherBlockAdd add_block{};
+    Block input =  blockFromHex("011321374153617f8193a1b7c1d3e1ff");
+    Block key =    blockFromHex("0102030405060708090a0b0c0d0e0f00");
+    Block output = blockFromHex("00112233445566778899aabbccddeeff");
+    add_block.decrypt(input, key);
+    expectBlockEqual(input, output, __func__);
+}
 
-void testEncryptBlockLinearSingle() {
-    EncryptBlockLinear linear_block{};
+void testEncryptLinearSingle() {
+    CipherBlockLinear linear_block{};
     Block input = blockFromHex("00000000000000000000000000000100");
     std::vector<Block> outputs = {
                   blockFromHex("94000000000000000000000000000001"),
@@ -157,8 +180,23 @@ void testEncryptBlockLinearSingle() {
     }
 }
 
-void testEncryptBlockLinear() {
-    EncryptBlockLinear linear_block{};
+void testDecryptLinearSingle() {
+    CipherBlockLinear linear_block{};
+    Block input = blockFromHex("0d64a594000000000000000000000000");
+    std::vector<Block> outputs = {
+                  blockFromHex("64a59400000000000000000000000000"),
+                  blockFromHex("a5940000000000000000000000000000"),
+                  blockFromHex("94000000000000000000000000000001"),
+                  blockFromHex("00000000000000000000000000000100")
+    };
+    for (auto output : outputs) {
+        linear_block.decryptSingle(input);
+        expectBlockEqual(input, output, __func__);
+    }
+}
+
+void testEncryptLinear() {
+    CipherBlockLinear linear_block{};
     Block input = blockFromHex("64a59400000000000000000000000000");
     std::vector<Block> outputs = {
                   blockFromHex("d456584dd0e3e84cc3166e4b7fa2890d"),
@@ -172,8 +210,23 @@ void testEncryptBlockLinear() {
     }
 }
 
-void testEncryptBlockLinearKey() {
-    EncryptBlockLinear linear_block{};
+void testDecryptLinear() {
+    CipherBlockLinear linear_block{};
+    Block input = blockFromHex("e6a8094fee0aa204fd97bcb0b44b8580");
+    std::vector<Block> outputs = {
+                  blockFromHex("0e93691a0cfc60408b7b68f66b513c13"),
+                  blockFromHex("79d26221b87b584cd42fbc4ffea5de9a"),
+                  blockFromHex("d456584dd0e3e84cc3166e4b7fa2890d"),
+                  blockFromHex("64a59400000000000000000000000000")
+    };
+    for (auto output : outputs) {
+        linear_block.decrypt(input);
+        expectBlockEqual(input, output, __func__);
+    }
+}
+
+void testKeyScheduleConsts() {
+    CipherBlockLinear linear_block{};
     std::vector<Block> outputs = {
         blockFromHex("6ea276726c487ab85d27bd10dd849401"),
         blockFromHex("dc87ece4d890f4b3ba4eb92079cbeb02"),
@@ -191,7 +244,7 @@ void testEncryptBlockLinearKey() {
     }
 }
 
-void testEncryptRound() {
+void testKeyScheduleStep() {
     KeyScheduleStep block{};
     Block i_left =    blockFromHex("8899aabbccddeeff0011223344556677");
     Block i_right =   blockFromHex("fedcba98765432100123456789abcdef");
@@ -205,7 +258,7 @@ void testEncryptRound() {
     expectBlockEqual(i_right, o_right, __func__);
 }
 
-void testRoundKeys() {
+void testKeySchedule() {
     const std::array<Block, 10> K{{
         blockFromHex("8899aabbccddeeff0011223344556677"),
         blockFromHex("fedcba98765432100123456789abcdef"),
@@ -230,20 +283,40 @@ void testEncryptPipeline() {
     Block input =  blockFromHex("1122334455667700ffeeddccbbaa9988");
     Block output = blockFromHex("7f679d90bebc24305a468d42b9d4edcd");
 
-    EncryptFull cipher(K);
+    CipherFull cipher(K);
     cipher.encrypt(input);
+    expectBlockEqual(input, output, __func__);
+}
+
+void testDecryptPipeline() {
+    const KeyBlock K = keyFromHex("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef");
+    Block input =  blockFromHex("7f679d90bebc24305a468d42b9d4edcd");
+    Block output = blockFromHex("1122334455667700ffeeddccbbaa9988");
+
+    CipherFull cipher(K);
+    cipher.decrypt(input);
     expectBlockEqual(input, output, __func__);
 }
 
 int main() {
     testHexHelpers();
     testBlockFromNumber();
-    testEncryptBlockPermute();
-    testEncryptBlockAdd();
-    testEncryptBlockLinearSingle();
-    testEncryptBlockLinearKey();
-    testEncryptBlockLinear();
-    testEncryptRound();
-    testRoundKeys();
+
+    testEncryptPermute();
+    testDecryptPermute();
+
+    testEncryptAdd();
+    testDecryptAdd();
+
+    testEncryptLinearSingle();
+    testDecryptLinearSingle();
+    testEncryptLinear();
+    testDecryptLinear();
+
+    testKeyScheduleConsts();
+    testKeyScheduleStep();
+    testKeySchedule();
+
     testEncryptPipeline();
+    testDecryptPipeline();
 }
