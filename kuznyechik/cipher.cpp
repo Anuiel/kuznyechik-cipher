@@ -1,5 +1,9 @@
 #include "cipher.hpp"
 
+#include <cstddef>
+#include <cstdint>
+#include <algorithm>
+
 void EncryptBlockPermute::encrypt(Block& block, const std::optional<Block>&) {
     for (size_t i = 0; i < BLOCK_SIZE; ++i) {
         block[i] = _permutation[block[i]];
@@ -10,14 +14,6 @@ void EncryptBlockAdd::encrypt(Block& block, const std::optional<Block>& key) {
     const Block& key_block = key.value();
     for (size_t i = 0; i < BLOCK_SIZE; ++i) {
         block[i] ^= key_block[i];
-    }
-}
-
-
-EncryptBlockLinear::EncryptBlockLinear() {
-    _reverse_powers.fill(255);
-    for (size_t power = 0; power < _powers.size() - 1; ++power) {
-        _reverse_powers[_powers[power]] = static_cast<std::uint8_t>(power);
     }
 }
 
@@ -51,16 +47,52 @@ void EncryptBlockLinear::encrypt(Block& block, const std::optional<Block>&) {
     }
 }
 
-
-// EncryptBlockFull::EncryptBlockFull() {
-//     _add = EncryptBlockAdd{};
-//     _linear = EncryptBlockLinear{};
-//     _permute = EncryptBlockPermute{};
-// }
-
-void EncryptBlockFull::encrypt(Block& block, const std::optional<Block>& key) {
-    _add.encrypt(block, key);
-    _permute.encrypt(block);
-    _linear.encrypt(block);
+void KeyScheduleStep::encrypt(Block& block_a, Block& block_b, const Block& key) {
+    Block tmp = block_a;
+    _add.encrypt(tmp, key);
+    _permute.encrypt(tmp);
+    _linear.encrypt(tmp);
+    _add.encrypt(tmp, block_b);
+    block_b = block_a;
+    block_a = tmp;
 }
 
+
+std::vector<Block> get_round_keys(const Block& key_left, const Block& key_right) {
+    KeyScheduleStep block{};
+    EncryptBlockLinear linear{};
+
+    std::vector<Block> c(32);
+    for (size_t i = 0; i < 32; ++i) {
+        c[i] = from_number(i + 1);
+        linear.encrypt(c[i]);
+    }
+    std::vector<Block> keys(10);
+    keys[0] = key_left;
+    keys[1] = key_right;
+
+    for (size_t i = 0; i < 4; ++i) {
+        Block left = keys[2 * i], right = keys[2 * i + 1];
+        for (size_t j = 0; j < 8; ++j) {
+            block.encrypt(left, right, c[8 * i + j]);
+        }
+        keys[2 * (i + 1)] = left;
+        keys[2 * (i + 1) + 1] = right;
+    }
+    return keys;
+}
+
+EncryptFull::EncryptFull(const KeyBlock& key) {
+    auto [key_left, key_right] = split_key_block(key);
+    _round_keys = get_round_keys(key_left, key_right);
+}
+
+
+void EncryptFull::encrypt(Block& block) {
+    for (size_t i = 0; i + 1 < _round_keys.size(); ++i) {
+        _add.encrypt(block, _round_keys[i]);
+        _permute.encrypt(block);
+        _linear.encrypt(block);
+    }
+    _add.encrypt(block, _round_keys.back());
+}

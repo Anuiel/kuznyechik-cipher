@@ -11,8 +11,9 @@ main: main.cpp cipher.cpp cipher.hpp
 test: test.cpp cipher.cpp cipher.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) test.cpp cipher.cpp $(LDFLAGS) $(LDLIBS) -o $@
 
-check: test
+check: test main
 	./test
+	../data/test-data/test.sh
 
 clean:
 	rm -f main test

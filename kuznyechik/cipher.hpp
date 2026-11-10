@@ -1,15 +1,43 @@
 #pragma once
 
 #include <array>
-#include <cstddef>
-#include <cstdint>
 #include <optional>
+#include <vector>
 
 // 128 bits
 constexpr size_t BITS_PER_BLOCK = 128;
 constexpr size_t BLOCK_SIZE = BITS_PER_BLOCK / 8;
 
+constexpr size_t BITS_PER_KEY = 256;
+constexpr size_t KEY_SIZE = BITS_PER_KEY / 8;
+
 using Block = std::array<uint8_t, BLOCK_SIZE>;
+using KeyBlock = std::array<uint8_t, KEY_SIZE>;
+
+
+inline std::array<Block, 2> split_key_block(const KeyBlock& key) {
+    static_assert(KEY_SIZE == 2 * BLOCK_SIZE, "A key must contain two blocks");
+    std::array<Block, 2> blocks{};
+    std::copy_n(key.begin(), BLOCK_SIZE, blocks[0].begin());
+    std::copy_n(key.begin() + BLOCK_SIZE, BLOCK_SIZE, blocks[1].begin());
+    return blocks;
+}
+
+inline Block single_bit_block(std::size_t i) {
+    if (i >= BITS_PER_BLOCK) {
+        throw std::out_of_range("Bit index is too large");
+    }
+
+    Block b{};
+    b[BLOCK_SIZE - 1 - i / 8] = static_cast<uint8_t>(1u << (i % 8));
+    return b;
+}
+
+inline Block from_number(uint8_t i) {
+    Block b{};
+    b.back() = i;
+    return b;
+}
 
 class EncryptBlock {
 public:
@@ -22,7 +50,7 @@ public:
     void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
 
 private:
-    const std::array<uint8_t, 256> _permutation{
+    static constexpr std::array<uint8_t, 256> _permutation{
         252, 238, 221,  17, 207, 110,  49,  22, 251, 196, 250, 218,  35, 197,   4,  77,
         233, 119, 240, 219, 147,  46, 153, 186,  23,  54, 241, 187,  20, 205,  95, 193,
         249,  24, 101,  90, 226,  92, 239,  33, 129,  28,  60,  66, 139,   1, 142,  79,
@@ -51,16 +79,14 @@ public:
 
 class EncryptBlockLinear : public EncryptBlock {
 public:
-    EncryptBlockLinear();
-
     std::optional<uint8_t> powerOf(uint8_t value) const;
 
     void encryptSingle(Block& block);
     void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
 
 private:
-    const size_t _LINEAR_ROUNDS = 16;
-    const std::array<uint8_t, 256> _powers{
+    static constexpr size_t _LINEAR_ROUNDS = 16;
+    static constexpr std::array<uint8_t, 256> _powers{
           1,   2,   4,   8,  16,  32,  64, 128, 195,  69, 138, 215, 109, 218, 119, 238,
          31,  62, 124, 248,  51, 102, 204,  91, 182, 175, 157, 249,  49,  98, 196,  75,
         150, 239,  29,  58, 116, 232,  19,  38,  76, 152, 243,  37,  74, 148, 235,  21,
@@ -79,19 +105,41 @@ private:
         125, 250,  55, 110, 220, 123, 246,  47,  94, 188, 187, 181, 169, 145, 225,   1
     };
 
-    const std::array<uint8_t, BLOCK_SIZE> _coefs{
+    static constexpr std::array<uint8_t, BLOCK_SIZE> _coefs{
         148, 32, 133, 16, 194, 192, 1, 251, 1, 192, 194, 16, 133, 32, 148, 1
     };
 
-    std::array<uint8_t, 256> _reverse_powers{};
+    inline static const std::array<uint8_t, 256> _reverse_powers = [] {
+        std::array<uint8_t, 256> reverse{};
+        reverse.fill(255);
+
+        for (size_t power = 0; power < _powers.size() - 1; ++power) {
+            reverse[_powers[power]] = static_cast<uint8_t>(power);
+        }
+
+        return reverse;
+    }();
 };
 
 
-class EncryptBlockFull : public EncryptBlock {
+class KeyScheduleStep {
 public:
-    void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
+    void encrypt(Block& block_a, Block& block_b, const Block& key);
 
 private:
+    EncryptBlockLinear _linear{};
+    EncryptBlockPermute _permute{};
+    EncryptBlockAdd _add{};
+};
+
+std::vector<Block> get_round_keys(const Block& key_left, const Block& key_right);
+
+class EncryptFull {
+public:
+    EncryptFull(const KeyBlock& key);
+    void encrypt(Block& block);
+private:
+    std::vector<Block> _round_keys;
     EncryptBlockLinear _linear{};
     EncryptBlockPermute _permute{};
     EncryptBlockAdd _add{};
