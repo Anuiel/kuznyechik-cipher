@@ -210,7 +210,37 @@ void testEncryptLinear() {
     }
 }
 
+void testEncryptLinearFast() {
+    CipherBlockLinearFast linear_block{};
+    Block input = blockFromHex("64a59400000000000000000000000000");
+    std::vector<Block> outputs = {
+                  blockFromHex("d456584dd0e3e84cc3166e4b7fa2890d"),
+                  blockFromHex("79d26221b87b584cd42fbc4ffea5de9a"),
+                  blockFromHex("0e93691a0cfc60408b7b68f66b513c13"),
+                  blockFromHex("e6a8094fee0aa204fd97bcb0b44b8580")
+    };
+    for (auto output : outputs) {
+        linear_block.encrypt(input);
+        expectBlockEqual(input, output, __func__);
+    }
+}
+
 void testDecryptLinear() {
+    CipherBlockLinear linear_block{};
+    Block input = blockFromHex("e6a8094fee0aa204fd97bcb0b44b8580");
+    std::vector<Block> outputs = {
+                  blockFromHex("0e93691a0cfc60408b7b68f66b513c13"),
+                  blockFromHex("79d26221b87b584cd42fbc4ffea5de9a"),
+                  blockFromHex("d456584dd0e3e84cc3166e4b7fa2890d"),
+                  blockFromHex("64a59400000000000000000000000000")
+    };
+    for (auto output : outputs) {
+        linear_block.decrypt(input);
+        expectBlockEqual(input, output, __func__);
+    }
+}
+
+void testDecryptLinearFast() {
     CipherBlockLinear linear_block{};
     Block input = blockFromHex("e6a8094fee0aa204fd97bcb0b44b8580");
     std::vector<Block> outputs = {
@@ -307,6 +337,8 @@ int main() {
 
     testEncryptAdd();
     testDecryptAdd();
+    testEncryptLinearFast();
+    testDecryptLinearFast();
 
     testEncryptLinearSingle();
     testDecryptLinearSingle();

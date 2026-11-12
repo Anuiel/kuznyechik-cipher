@@ -81,6 +81,56 @@ void CipherBlockLinear::decrypt(Block& block, const std::optional<Block>&) {
     }
 }
 
+LookupTable CipherBlockLinearFast::_makeTable(Direction direction) {
+    CipherBlockLinear linear{};
+    LookupTable table{};
+    for (size_t b = 0; b < 256; ++b) {
+        for (size_t pos = 0; pos < BLOCK_SIZE; ++pos) {
+            Block dummy{};
+            dummy[pos] = static_cast<uint8_t>(b);
+            if (direction == Direction::Encrypt) {
+                linear.encrypt(dummy);
+            } else {
+                linear.decrypt(dummy);
+            }
+            table[pos][b] = dummy;
+        }
+    }
+    return table;
+}
+
+const LookupTable& CipherBlockLinearFast::_encryptTable() {
+    static const LookupTable table = _makeTable(Direction::Encrypt);
+    return table;
+}
+
+const LookupTable& CipherBlockLinearFast::_decryptTable() {
+    static const LookupTable table = _makeTable(Direction::Decrypt);
+    return table;
+}
+
+void CipherBlockLinearFast::_applyTable(Block& block, const LookupTable& table) {
+    Block output{};
+    for (size_t pos = 0; pos < BLOCK_SIZE; ++pos) {
+        const Block& cache = table[pos][block[pos]];
+        for (size_t i = 0; i < BLOCK_SIZE; ++i) {
+            output[i] ^= cache[i];
+        }
+    }
+    block = output;
+}
+
+// __attribute__((noinline))
+void CipherBlockLinearFast::encrypt(Block& block, const std::optional<Block>&) {
+    _applyTable(block, _encrypt_lookup_table);
+}
+
+__attribute__((noinline))
+void CipherBlockLinearFast::decrypt(Block& block, const std::optional<Block>&) {
+    _applyTable(block, _decrypt_lookup_table);
+}
+
+
 void KeyScheduleStep::encrypt(Block& block_a, Block& block_b, const Block& key) {
     Block tmp = block_a;
     _add.encrypt(tmp, key);

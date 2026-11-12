@@ -13,7 +13,7 @@ constexpr size_t KEY_SIZE = BITS_PER_KEY / 8;
 
 using Block = std::array<uint8_t, BLOCK_SIZE>;
 using KeyBlock = std::array<uint8_t, KEY_SIZE>;
-
+using LookupTable = std::array<std::array<Block, 256>, BLOCK_SIZE>;
 
 inline std::array<Block, 2> split_key_block(const KeyBlock& key) {
     static_assert(KEY_SIZE == 2 * BLOCK_SIZE, "A key must contain two blocks");
@@ -134,13 +134,37 @@ private:
     }();
 };
 
+class CipherBlockLinearFast : public CipherBlockLinear {
+public:
+    void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
+    void decrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
+private:
+    enum class Direction { Encrypt, Decrypt };
+
+    static LookupTable _makeTable(Direction direction);
+    static const LookupTable& _encryptTable();
+    static const LookupTable& _decryptTable();
+    static void _applyTable(Block& block, const LookupTable& table);
+
+    const LookupTable& _encrypt_lookup_table = _encryptTable();
+    const LookupTable& _decrypt_lookup_table = _decryptTable();
+};
+
+
+// class CipherBlockPermuteLinearFast : public CipherBlock {
+// public:
+//     void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
+//     void decrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
+// private:
+//     const LookupTable& _encrypt_lookup_table;
+// };
 
 class KeyScheduleStep {
 public:
     void encrypt(Block& block_a, Block& block_b, const Block& key);
 
 private:
-    CipherBlockLinear _linear{};
+    CipherBlockLinearFast _linear{};
     CipherBlockPermute _permute{};
     CipherBlockAdd _add{};
 };
@@ -154,7 +178,7 @@ public:
     void decrypt(Block& block);
 private:
     std::vector<Block> _round_keys;
-    CipherBlockLinear _linear{};
+    CipherBlockLinearFast _linear{};
     CipherBlockPermute _permute{};
     CipherBlockAdd _add{};
 };

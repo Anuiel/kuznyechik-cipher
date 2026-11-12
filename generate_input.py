@@ -4,8 +4,8 @@ import random
 
 def generate_salt(seed: int, size: int, output: Path):
     generator = random.Random(seed)
-    result: str = generator.randbytes(size).hex().upper()
-    with output.open("w") as f:
+    result = generator.randbytes(size)
+    with output.open("wb") as f:
         f.write(result)
 
 

@@ -1,8 +1,9 @@
 #include "cipher.hpp"
 
+#include <array>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -22,14 +23,6 @@ bool readHexByte(std::istream& input, uint8_t& byte) {
 
     byte = static_cast<uint8_t>((hexValue(high) << 4) | hexValue(low));
     return true;
-}
-
-void writeHexByte(std::ostream& out, uint8_t byte) {
-    out << std::hex
-        << std::uppercase
-        << std::setw(2)
-        << std::setfill('0')
-        << static_cast<int>(byte);
 }
 
 int main(int argc, char* argv[]) {
@@ -66,8 +59,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::ifstream input(input_path);
-    std::ofstream output(output_path);
+    std::ifstream input(input_path, std::ios::binary);
+    std::ofstream output(output_path, std::ios::binary);
     std::ifstream key_stream(key_path);
     if (!input || !output || !key_stream) {
         std::cerr << "Could not open file\n";
@@ -83,21 +76,28 @@ int main(int argc, char* argv[]) {
     }
 
     CipherFull cipher{key};
-    Block block{};
+    std::array<char, 64 * 1024> buffer{};
     while (true) {
-        std::size_t count = 0;
-        while (count < BLOCK_SIZE && readHexByte(input, block[count])) {
-            ++count;
+        input.read(buffer.data(), buffer.size());
+        const std::streamsize count = input.gcount();
+        if (count == 0) {
+            break;
         }
-        if (count == 0) break;
+        if (count % BLOCK_SIZE != 0) {
+            std::cerr << "Input must contain complete 16-byte blocks\n";
+            return 1;
+        }
 
-        if (mode == "--decrypt") {
-            cipher.decrypt(block);
-        } else {
-            cipher.encrypt(block);
+        for (std::streamsize offset = 0; offset < count; offset += BLOCK_SIZE) {
+            Block block{};
+            std::memcpy(block.data(), buffer.data() + offset, BLOCK_SIZE);
+            if (mode == "--decrypt") {
+                cipher.decrypt(block);
+            } else {
+                cipher.encrypt(block);
+            }
+            std::memcpy(buffer.data() + offset, block.data(), BLOCK_SIZE);
         }
-        for (auto byte : block) {
-            writeHexByte(output, byte);
-        }
+        output.write(buffer.data(), count);
     }
 }
