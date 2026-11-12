@@ -134,6 +134,8 @@ private:
     }();
 };
 
+void _applyTable(Block& block, const LookupTable& table);
+
 class CipherBlockLinearFast : public CipherBlockLinear {
 public:
     void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
@@ -144,20 +146,23 @@ private:
     static LookupTable _makeTable(Direction direction);
     static const LookupTable& _encryptTable();
     static const LookupTable& _decryptTable();
-    static void _applyTable(Block& block, const LookupTable& table);
 
     const LookupTable& _encrypt_lookup_table = _encryptTable();
     const LookupTable& _decrypt_lookup_table = _decryptTable();
 };
 
 
-// class CipherBlockPermuteLinearFast : public CipherBlock {
-// public:
-//     void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
-//     void decrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
-// private:
-//     const LookupTable& _encrypt_lookup_table;
-// };
+class CipherBlockPermuteLinearFast : public CipherBlock {
+public:
+    void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
+    void decrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
+private:
+    static LookupTable _makeTable();
+    static const LookupTable& _encryptTable();
+    CipherBlockLinearFast _linear{};
+    CipherBlockPermute _permute{};
+    const LookupTable& _encrypt_lookup_table = _encryptTable();
+};
 
 class KeyScheduleStep {
 public:
@@ -178,7 +183,6 @@ public:
     void decrypt(Block& block);
 private:
     std::vector<Block> _round_keys;
-    CipherBlockLinearFast _linear{};
-    CipherBlockPermute _permute{};
+    CipherBlockPermuteLinearFast _permute_linear{};
     CipherBlockAdd _add{};
 };

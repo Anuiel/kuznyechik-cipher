@@ -109,7 +109,7 @@ const LookupTable& CipherBlockLinearFast::_decryptTable() {
     return table;
 }
 
-void CipherBlockLinearFast::_applyTable(Block& block, const LookupTable& table) {
+void _applyTable(Block& block, const LookupTable& table) {
     Block output{};
     for (size_t pos = 0; pos < BLOCK_SIZE; ++pos) {
         const Block& cache = table[pos][block[pos]];
@@ -130,6 +130,39 @@ void CipherBlockLinearFast::decrypt(Block& block, const std::optional<Block>&) {
     _applyTable(block, _decrypt_lookup_table);
 }
 
+
+LookupTable CipherBlockPermuteLinearFast::_makeTable() {
+    CipherBlockLinear linear{};
+    CipherBlockPermute permute{};
+    LookupTable table{};
+    for (size_t b = 0; b < 256; ++b) {
+        for (size_t pos = 0; pos < BLOCK_SIZE; ++pos) {
+            Block permute_dummy{};
+            permute_dummy[pos] = static_cast<uint8_t>(b);
+            permute.encrypt(permute_dummy);
+
+            Block linear_dummy{};
+            linear_dummy[pos] = permute_dummy[pos];
+            linear.encrypt(linear_dummy);
+            table[pos][b] = linear_dummy;
+        }
+    }
+    return table;
+}
+
+const LookupTable& CipherBlockPermuteLinearFast::_encryptTable() {
+    static const LookupTable table = _makeTable();
+    return table;
+}
+
+void CipherBlockPermuteLinearFast::encrypt(Block& block, const std::optional<Block>&) {
+    _applyTable(block, _encrypt_lookup_table);
+}
+
+void CipherBlockPermuteLinearFast::decrypt(Block& block, const std::optional<Block>&) {
+    _linear.decrypt(block);
+    _permute.decrypt(block);
+}
 
 void KeyScheduleStep::encrypt(Block& block_a, Block& block_b, const Block& key) {
     Block tmp = block_a;
@@ -174,8 +207,9 @@ CipherFull::CipherFull(const KeyBlock& key) {
 void CipherFull::encrypt(Block& block) {
     for (size_t i = 0; i + 1 < _round_keys.size(); ++i) {
         _add.encrypt(block, _round_keys[i]);
-        _permute.encrypt(block);
-        _linear.encrypt(block);
+        // _permute.encrypt(block);
+        // _linear.encrypt(block);
+        _permute_linear.encrypt(block);
     }
     _add.encrypt(block, _round_keys.back());
 }
@@ -183,8 +217,9 @@ void CipherFull::encrypt(Block& block) {
 void CipherFull::decrypt(Block &block) {
     _add.decrypt(block, _round_keys.back());
     for (size_t i = _round_keys.size() - 1; i > 0; --i) {
-        _linear.decrypt(block);
-        _permute.decrypt(block);
+        // _linear.decrypt(block);
+        // _permute.decrypt(block);
+        _permute_linear.decrypt(block);
         _add.decrypt(block, _round_keys[i - 1]);
     }
 }

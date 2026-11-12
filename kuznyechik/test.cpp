@@ -255,6 +255,36 @@ void testDecryptLinearFast() {
     }
 }
 
+void testEncryptPermuteLinearFast() {
+    CipherBlockLinear linear{};
+    CipherBlockPermute permute{};
+
+    CipherBlockPermuteLinearFast permute_linear{};
+
+    Block input = blockFromHex("e6a8094fee0aa204fd97bcb0b44b8580");
+    Block output = input;
+    permute.encrypt(output);
+    linear.encrypt(output);
+
+    permute_linear.encrypt(input);
+    expectBlockEqual(input, output, __func__);
+}
+
+void testDecryptPermuteLinearFast() {
+    CipherBlockLinear linear{};
+    CipherBlockPermute permute{};
+
+    CipherBlockPermuteLinearFast permute_linear{};
+
+    Block input = blockFromHex("e6a8094fee0aa204fd97bcb0b44b8580");
+    Block output = input;
+    linear.decrypt(output);
+    permute.decrypt(output);
+
+    permute_linear.decrypt(input);
+    expectBlockEqual(input, output, __func__);
+}
+
 void testKeyScheduleConsts() {
     CipherBlockLinear linear_block{};
     std::vector<Block> outputs = {
@@ -345,6 +375,8 @@ int main() {
     testEncryptLinear();
     testDecryptLinear();
 
+    testEncryptPermuteLinearFast();
+    
     testKeyScheduleConsts();
     testKeyScheduleStep();
     testKeySchedule();
