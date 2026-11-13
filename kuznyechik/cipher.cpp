@@ -90,7 +90,7 @@ LookupTable CipherBlockLinearFast::_makeTable(Direction direction) {
             dummy[pos] = static_cast<uint8_t>(b);
             if (direction == Direction::Encrypt) {
                 linear.encrypt(dummy);
-            } else {
+            } else if (direction == Direction::Decrypt) {
                 linear.decrypt(dummy);
             }
             table[pos][b] = dummy;

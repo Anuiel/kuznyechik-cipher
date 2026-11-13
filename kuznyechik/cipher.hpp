@@ -135,13 +135,13 @@ private:
 };
 
 void _applyTable(Block& block, const LookupTable& table);
+enum class Direction { Encrypt, Decrypt };
 
 class CipherBlockLinearFast : public CipherBlockLinear {
 public:
     void encrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
     void decrypt(Block& block, const std::optional<Block>& key = std::nullopt) override;
 private:
-    enum class Direction { Encrypt, Decrypt };
 
     static LookupTable _makeTable(Direction direction);
     static const LookupTable& _encryptTable();
